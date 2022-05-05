@@ -1,8 +1,10 @@
+use std::fmt::format;
 // SINGLE,8100,8100,arloor.com
 // RANGE,1000,2000,arloor.com
 use std::fs::{self, File};
-use crate::ip;
 use std::process::exit;
+
+use crate::ip;
 
 #[derive(Debug)]
 pub enum nat_cell {
@@ -19,37 +21,45 @@ pub enum nat_cell {
 }
 
 impl nat_cell {
-    pub fn build(&self) -> String {
+    pub fn build(&self, eth_name: String) -> String {
         let remote_domain = match &self {
             nat_cell::SINGLE { remote_domain, .. } => remote_domain,
             nat_cell::RANGE { remote_domain, .. } => remote_domain
         };
+
         let remote_ip = match ip::remote_ip(remote_domain) {
             Some(s) => s,
             None => return "".to_string(),
         };
+
         let local_ip = match ip::local_ip() {
             Some(s) => s,
             None => return "".to_string(),
         };
+        let mut iifname = String::new();
+        let mut oifname = String::new();
+        if !eth_name.is_empty() {
+            iifname += &*format!(" iifname \"{name}\"", name = eth_name);
+            oifname += &*format!(" oifname \"{name}\"", name = eth_name)
+        }
         match &self {
             nat_cell::RANGE { port_start, port_end, remote_domain } =>
                 {
                     format!("#{cell:?}\n\
-                    add rule ip nat PREROUTING tcp dport {portStart}-{portEnd} counter dnat to {remoteIP}:{portStart}-{portEnd}\n\
-                    add rule ip nat PREROUTING udp dport {portStart}-{portEnd} counter dnat to {remoteIP}:{portStart}-{portEnd}\n\
-                    add rule ip nat POSTROUTING ip daddr {remoteIP} tcp dport {portStart}-{portEnd} counter snat to {localIP}\n\
-                    add rule ip nat POSTROUTING ip daddr {remoteIP} udp dport {portStart}-{portEnd} counter snat to {localIP}\n\n\
-                    ", cell = self, portStart = port_start, portEnd = port_end, remoteIP = remote_ip, localIP = local_ip)
+                    add rule ip nat PREROUTING{iif} tcp dport {portStart}-{portEnd} counter dnat to {remoteIP}:{portStart}-{portEnd}\n\
+                    add rule ip nat PREROUTING{iif} udp dport {portStart}-{portEnd} counter dnat to {remoteIP}:{portStart}-{portEnd}\n\
+                    add rule ip nat POSTROUTING{oif} ip daddr {remoteIP} tcp dport {portStart}-{portEnd} counter snat to {localIP}\n\
+                    add rule ip nat POSTROUTING{oif} ip daddr {remoteIP} udp dport {portStart}-{portEnd} counter snat to {localIP}\n\n\
+                    ", cell = self, portStart = port_start, portEnd = port_end, remoteIP = remote_ip, localIP = local_ip, iif = iifname, oif = oifname)
                 }
             nat_cell::SINGLE { local_port, remote_port, remote_domain } =>
                 {
                     format!("#{cell:?}\n\
-                    add rule ip nat PREROUTING tcp dport {localPort} counter dnat to {remoteIP}:{remotePort}\n\
-                    add rule ip nat PREROUTING udp dport {localPort} counter dnat to {remoteIP}:{remotePort}\n\
-                    add rule ip nat POSTROUTING ip daddr {remoteIP} tcp dport {remotePort} counter snat to {localIP}\n\
-                    add rule ip nat POSTROUTING ip daddr {remoteIP} udp dport {remotePort} counter snat to {localIP}\n\n\
-                    ", cell = self, localPort = local_port, remotePort = remote_port, remoteIP = remote_ip, localIP = local_ip)
+                    add rule ip nat PREROUTING{iif} tcp dport {localPort} counter dnat to {remoteIP}:{remotePort}\n\
+                    add rule ip nat PREROUTING{iif} udp dport {localPort} counter dnat to {remoteIP}:{remotePort}\n\
+                    add rule ip nat POSTROUTING{oif} ip daddr {remoteIP} tcp dport {remotePort} counter snat to {localIP}\n\
+                    add rule ip nat POSTROUTING{oif} ip daddr {remoteIP} udp dport {remotePort} counter snat to {localIP}\n\n\
+                    ", cell = self, localPort = local_port, remotePort = remote_port, remoteIP = remote_ip, localIP = local_ip, iif = iifname, oif = oifname)
                 }
         }
     }

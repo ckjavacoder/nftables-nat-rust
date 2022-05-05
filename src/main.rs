@@ -1,13 +1,13 @@
-mod ip;
-mod config;
-
+use std::{env, io};
 use std::collections::HashMap;
-use std::process::{exit, Command};
 use std::fs::File;
 use std::io::Write;
-use std::{io, env};
+use std::process::{Command, exit};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+
+mod ip;
+mod config;
 
 fn main() {
     std::fs::create_dir_all("/etc/nftables");
@@ -21,15 +21,20 @@ fn main() {
 
     loop {
         let mut conf = String::new();
-        if args.len() != 2 {
+        let mut eth_name = String::new();
+        if args.len() < 2 {
             let conf = "nat.conf".to_string();
             println!("{}{}", "使用方式：nat ", conf);
             config::example(&conf);
             return;
-        } else {
+        }
+        if args.len() > 1 {
             conf += &args[1];
         }
-
+        if args.len() > 2
+        {
+            eth_name += &args[2];
+        }
         //脚本的前缀
         let script_prefix = String::from("#!/usr/sbin/nft -f\n\
         \n\
@@ -45,7 +50,7 @@ fn main() {
 
         for x in vec.iter() {
             let (domain, ip) = x.get_target_ip();
-            let string = x.build();
+            let string = x.build(eth_name.to_string());
             script += &string;
         }
 
@@ -68,6 +73,8 @@ fn main() {
                 io::stdout().write_all(&output.stdout).unwrap_or_else(|e| println!("error {}", e));
                 io::stderr().write_all(&output.stderr).unwrap_or_else(|e| println!("error {}", e));
                 println!("WAIT:等待配置或目标IP发生改变....\n");
+            } else {
+                println!("config:{}", script)
             }
         }
 
